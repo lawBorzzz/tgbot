@@ -5,6 +5,7 @@ import io
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackQueryHandler
 import openai
+import requests
 
 # Используй API-ключ ProxyAPI
 PROXY_API_KEY = "sk-QxMDyszP1bCKSij5i9mx6pBVfG0xes5i"  # Ваш ключ
@@ -103,46 +104,41 @@ async def start(update: Update, context):
 
 # Команда /menu для отображения информации о текущей модели и количестве активных пользователей
 async def menu(update: Update, context):
-    # Определяем, откуда пришел запрос - из команды или из callback_query
-    if update.message:  # Если вызов через команду /menu
+    if update.message:
         user_id = update.message.from_user.id
-    elif update.callback_query:  # Если вызов через нажатие на кнопку "Назад"
+    elif update.callback_query:
         user_id = update.callback_query.from_user.id
 
     if not is_admin(user_id):
         await update.message.reply_text("У вас нет прав для просмотра меню.")
         return
 
-    # Получаем текущую модель
     global current_model
-
-    # Подсчитываем количество активных пользователей (с доступом)
     users = get_all_users()
     active_users_count = sum(1 for user in users.values() if user['access'])
 
-    # Создаем кнопки меню
+    # Получаем баланс через функцию
+    balance = get_balance()
+
     buttons = [
         [InlineKeyboardButton("Пользователи", callback_data="menu:users")],
         [InlineKeyboardButton("Выбор модели", callback_data="menu:models")]
     ]
 
-    # Формируем сообщение с текущей информацией
     menu_text = (
         f"Активная модель: {current_model}\n"
-        f"Активных пользователей: {active_users_count}"
+        f"Активных пользователей: {active_users_count}\n"
+        f"Баланс: {balance} ₽"
     )
 
     reply_markup = InlineKeyboardMarkup(buttons)
 
-    # Отправляем сообщение в зависимости от того, откуда вызвана функция
-    if update.message:  # Если вызов через команду
+    if update.message:
         await update.message.reply_text(menu_text, reply_markup=reply_markup)
-    elif update.callback_query:  # Если вызов через callback (например, кнопка "Назад")
-        # Проверяем, изменилось ли сообщение или кнопки
+    elif update.callback_query:
         if update.callback_query.message.text != menu_text:
             await update.callback_query.message.edit_text(menu_text, reply_markup=reply_markup)
         else:
-            # Если содержимое не изменилось, отправляем новое сообщение
             await update.callback_query.message.edit_reply_markup(reply_markup=reply_markup)
 
 # Обработка нажатий на кнопки в меню
@@ -186,6 +182,21 @@ async def show_models_menu(query):
 
     reply_markup = InlineKeyboardMarkup(buttons)
     await query.edit_message_text("Выберите модель:", reply_markup=reply_markup)
+
+def get_balance():
+    url = "https://api.proxyapi.ru/proxyapi/balance"
+    headers = {
+        "Authorization": f"Bearer {PROXY_API_KEY}"
+    }
+    try:
+        response = requests.get(url, headers=headers)
+        if response.status_code == 200:
+            balance = response.json().get("balance", 0.0)
+            return f"{balance:.2f}"  # Округление до двух знаков
+        else:
+            return f"Ошибка: {response.status_code} - {response.text}"
+    except requests.exceptions.RequestException as e:
+        return f"Ошибка соединения: {e}"
 
 # Обработка нажатий на кнопки пользователей и моделей
 async def button_handler(update: Update, context):
