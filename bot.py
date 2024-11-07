@@ -152,10 +152,12 @@ async def show_user_expenses(update: Update, context):
         # Добавляем информацию о расходах в строку сообщения
         message += f"{username} - {expense:.2f} ₽\n"
 
-    if update.message:
+    # Добавляем кнопку "Назад" только если вызов из меню (callback_query)
+    if update.callback_query:
+        reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton("Назад", callback_data="menu:back")]])
+        await update.callback_query.message.edit_text(message, reply_markup=reply_markup)
+    elif update.message:
         await update.message.reply_text(message)
-    elif update.callback_query:
-        await update.callback_query.message.edit_text(message)
 
 # Команда /menu для отображения информации о текущей модели и количестве активных пользователей
 async def menu(update: Update, context):
@@ -279,11 +281,12 @@ async def toggle_user_access(query, user_id):
     if user:
         username = user['username']
         access = user['access']
-        new_access = not access  # Меняем доступ
-        update_user_access(user_id, new_access)  # Обновляем доступ в JSON файле
-
+        new_access = not access
+        update_user_access(user_id, new_access)
         access_text = "Да" if new_access else "Нет"
-        await query.edit_message_text(f"Доступ для {username} (ID: {user_id}) изменен на: {access_text}")
+        
+        reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton("Назад", callback_data="menu:back")]])
+        await query.edit_message_text(f"Доступ для {username} (ID: {user_id}) изменен на: {access_text}", reply_markup=reply_markup)
 
 # Обработка выбора модели
 async def choose_model(query, model):
