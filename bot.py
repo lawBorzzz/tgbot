@@ -128,36 +128,19 @@ def calculate_cost(request_tokens, response_tokens):
     return round(cost, 2)
 
 async def show_user_expenses(update: Update, context):
-    # Определяем источник вызова (команда или кнопка)
-    if update.message:
-        user_id = update.message.from_user.id
-    elif update.callback_query:
-        user_id = update.callback_query.from_user.id
-
-    # Проверяем, что команду выполняет администратор
+    user_id = update.message.from_user.id
     if not is_admin(user_id):
-        if update.message:
-            await update.message.reply_text("У вас нет прав для просмотра информации о расходах.")
-        elif update.callback_query:
-            await update.callback_query.answer("У вас нет прав для просмотра информации о расходах.", show_alert=True)
+        await update.message.reply_text("Эта команда доступна только администратору.")
         return
 
-    # Формируем текст с расходами пользователей
     message = "Расходы пользователей:\n"
-    for uid, expense in user_expenses.items():
-        user = get_user_by_id(uid)
-        username = user.get("username", "Неизвестный пользователь")
+    for uid, expense_data in user_expenses.items():
+        user_info = get_user_by_id(uid)
+        username = user_info['username'] if user_info else 'Unknown'
+        expense = expense_data.get("expense", 0) if isinstance(expense_data, dict) else expense
         message += f"{username} - {expense:.2f} ₽\n"
 
-    # Кнопка "Назад"
-    buttons = [[InlineKeyboardButton("Назад", callback_data="menu:back")]]
-    reply_markup = InlineKeyboardMarkup(buttons)
-
-    # Отправка сообщения в зависимости от источника вызова
-    if update.message:
-        await update.message.reply_text(message, reply_markup=reply_markup)
-    elif update.callback_query:
-        await update.callback_query.message.edit_text(message, reply_markup=reply_markup)
+    await send_long_message(update.message.chat, message)  # Заменено на send_long_message
 
 # Команда /menu для отображения информации о текущей модели и количестве активных пользователей
 async def menu(update: Update, context):
@@ -179,8 +162,7 @@ async def menu(update: Update, context):
 
     buttons = [
         [InlineKeyboardButton("Пользователи", callback_data="menu:users")],
-        [InlineKeyboardButton("Выбор модели", callback_data="menu:models")],
-        [InlineKeyboardButton("Расходы", callback_data="menu:expenses")]
+        [InlineKeyboardButton("Выбор модели", callback_data="menu:models")]
     ]
 
     menu_text = (
@@ -208,8 +190,6 @@ async def menu_button_handler(update: Update, context):
         await show_users_menu(query, context)
     elif data == "menu:models":
         await show_models_menu(query)
-    elif data == "menu:expenses":
-        await show_user_expenses(update, context)  # Вызов функции для показа расходов
     elif data == "menu:back":
         # Возвращаемся в главное меню
         await menu(update, context)
@@ -248,6 +228,7 @@ async def show_models_menu(query):
 
     reply_markup = InlineKeyboardMarkup(buttons)
     await query.edit_message_text("Выберите модель:", reply_markup=reply_markup)
+
 
 def get_balance():
     url = "https://api.proxyapi.ru/proxyapi/balance"
@@ -293,6 +274,15 @@ async def choose_model(query, model):
     current_model = model  # Изменяем текущую модель
     await query.edit_message_text(f"Вы выбрали модель: {current_model}")
 
+# Функция для разбиения текста на части
+def split_text(text, max_length=4096):
+    return [text[i:i + max_length] for i in range(0, len(text), max_length)]
+
+# Модифицированная функция отправки длинного сообщения
+async def send_long_message(chat, text):
+    for part in split_text(text):
+        await chat.send_message(part)
+
 # Обработка сообщений
 async def handle_message(update: Update, context):
     user_id = update.message.from_user.id
@@ -305,11 +295,10 @@ async def handle_message(update: Update, context):
         user_histories[user_id].append({"role": "user", "content": user_message})
 
         try:
-            # Отправляем запрос с выбранной моделью
             response = openai.ChatCompletion.create(
                 model=current_model,
                 messages=user_histories[user_id],
-                max_tokens=1024
+                max_tokens=2048
             )
             bot_reply = response['choices'][0]['message']['content']
             filtered_reply = latex_to_plain_text(bot_reply)
@@ -331,7 +320,7 @@ async def handle_message(update: Update, context):
             save_expenses_to_json()
 
             user_histories[user_id].append({"role": "assistant", "content": filtered_reply})
-            await update.message.reply_text(f"{filtered_reply}\n\nСтоимость запроса: {cost} ₽")
+            await send_long_message(update.message.chat, f"{filtered_reply}\n\nСтоимость запроса: {cost} ₽")  # Заменено на send_long_message
         except Exception as e:
             await update.message.reply_text(f"Ошибка: {str(e)}")
     else:
