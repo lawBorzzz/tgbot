@@ -219,8 +219,14 @@ async def show_users_menu(query, context):
 # Показ меню моделей
 async def show_models_menu(query):
     buttons = []
-    for model, price in models.items():
-        buttons.append([InlineKeyboardButton(f"{model} ({price})", callback_data=f"model:{model}")])
+    for model, details in models.items():
+        request_price = details.get('request_price')
+        response_price = details.get('response_price')
+        description = details.get('description', '')
+        
+        # Форматируем строку для показа
+        button_text = f"{model} (Запрос: {request_price} ₽, Ответ: {response_price} ₽)"
+        buttons.append([InlineKeyboardButton(button_text, callback_data=f"model:{model}")])
 
     # Добавляем кнопку "Назад"
     buttons.append([InlineKeyboardButton("Назад", callback_data="menu:back")])
