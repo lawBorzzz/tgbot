@@ -128,7 +128,14 @@ def calculate_cost(request_tokens, response_tokens):
     return round(cost, 2)
 
 async def show_user_expenses(update: Update, context):
-    user_id = update.message.from_user.id
+    if update.message:
+        user_id = update.message.from_user.id
+    elif update.callback_query:
+        user_id = update.callback_query.from_user.id
+    else:
+        await update.message.reply_text("Не удалось определить пользователя.")
+        return
+
     if not is_admin(user_id):
         await update.message.reply_text("Эта команда доступна только администратору.")
         return
@@ -145,7 +152,10 @@ async def show_user_expenses(update: Update, context):
         # Добавляем информацию о расходах в строку сообщения
         message += f"{username} - {expense:.2f} ₽\n"
 
-    await update.message.reply_text(message)
+    if update.message:
+        await update.message.reply_text(message)
+    elif update.callback_query:
+        await update.callback_query.message.edit_text(message)
 
 # Команда /menu для отображения информации о текущей модели и количестве активных пользователей
 async def menu(update: Update, context):
