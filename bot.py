@@ -162,12 +162,12 @@ async def menu(update: Update, context):
     users = get_all_users()
     active_users_count = sum(1 for user in users.values() if user['access'])
 
-    # Получаем баланс через функцию
     balance = get_balance()
 
     buttons = [
         [InlineKeyboardButton("Пользователи", callback_data="menu:users")],
-        [InlineKeyboardButton("Выбор модели", callback_data="menu:models")]
+        [InlineKeyboardButton("Выбор модели", callback_data="menu:models")],
+        [InlineKeyboardButton("Расходы", callback_data="menu:expenses")]
     ]
 
     menu_text = (
@@ -195,6 +195,8 @@ async def menu_button_handler(update: Update, context):
         await show_users_menu(query, context)
     elif data == "menu:models":
         await show_models_menu(query)
+    elif data == "menu:expenses":
+        await show_user_expenses(update, context)  # Вызов функции для показа расходов
     elif data == "menu:back":
         # Возвращаемся в главное меню
         await menu(update, context)
