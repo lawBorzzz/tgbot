@@ -15,21 +15,24 @@ openai.api_base = "https://api.proxyapi.ru/openai/v1"
 # ID администратора
 ADMIN_ID = {1980610942}  # Замените на ваш Telegram ID для администратора
 
-# Хранение истории сообщений для каждого пользователя
+# Хранение истории сообщений для каждого пользователя и расходов
 user_histories = {}
+user_expenses = {}
 
-# Доступные модели и их цены
+
+# Обновленный словарь моделей с раздельной ценой для запроса и ответа
 models = {
-    "o1-preview": "3,00 ₽ за 1K токенов",
-    "o1-mini": "0,864 ₽ за 1K токенов",
-    "gpt-4o": "0,72 ₽ за 1K токенов",
-    "gpt-4o-2024-05-13": "1,44 ₽ за 1K токенов",
-    "gpt-4o-mini": "0,0432 ₽ за 1K токенов",
-    "gpt-4-turbo": "2,88 ₽ за 1K токенов",
-    "gpt-4": "8,64 ₽ за 1K токенов",
-    "gpt-3.5-turbo-0125": "0,144 ₽ за 1K токенов",
-    "gpt-3.5-turbo-1106": "0,30 ₽ за 1K токенов"
+    "o1-preview": {"request_price": 3.0, "response_price": 9.0, "description": "3,00 ₽ за запрос / 9,00 ₽ за ответ за 1K токенов"},
+    "o1-mini": {"request_price": 0.864, "response_price": 1.8, "description": "0,864 ₽ за запрос / 1,80 ₽ за ответ за 1K токенов"},
+    "gpt-4o": {"request_price": 0.72, "response_price": 2.88, "description": "0,72 ₽ за запрос / 2,88 ₽ за ответ за 1K токенов"},
+    "gpt-4o-2024-05-13": {"request_price": 1.44, "response_price": 4.32, "description": "1,44 ₽ за запрос / 4,32 ₽ за ответ за 1K токенов"},
+    "gpt-4o-mini": {"request_price": 0.0432, "response_price": 0.1728, "description": "0,0432 ₽ за запрос / 0,1728 ₽ за ответ за 1K токенов"},
+    "gpt-4-turbo": {"request_price": 2.88, "response_price": 8.64, "description": "2,88 ₽ за запрос / 8,64 ₽ за ответ за 1K токенов"},
+    "gpt-4": {"request_price": 8.64, "response_price": 17.28, "description": "8,64 ₽ за запрос / 17,28 ₽ за ответ за 1K токенов"},
+    "gpt-3.5-turbo-0125": {"request_price": 0.144, "response_price": 0.432, "description": "0,144 ₽ за запрос / 0,432 ₽ за ответ за 1K токенов"},
+    "gpt-3.5-turbo-1106": {"request_price": 0.30, "response_price": 0.60, "description": "0,30 ₽ за запрос / 0,60 ₽ за ответ за 1K токенов"}
 }
+
 
 # Переменная для хранения текущей модели
 current_model = "gpt-4o-mini"
@@ -37,7 +40,23 @@ current_model = "gpt-4o-mini"
 # Имя файла JSON для хранения данных пользователей в той же папке, где скрипт
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 USER_DATA_FILE = os.path.join(CURRENT_DIR, 'users.json')
+# Файл для хранения данных расходов
+EXPENSES_DATA_FILE = os.path.join(CURRENT_DIR, 'expenses.json')
 
+def save_expenses_to_json():
+    with open(EXPENSES_DATA_FILE, 'w') as file:
+        json.dump(user_expenses, file, indent=4)
+
+def load_expenses_from_json():
+    global user_expenses
+    if os.path.exists(EXPENSES_DATA_FILE):
+        with open(EXPENSES_DATA_FILE, 'r') as file:
+            try:
+                user_expenses = json.load(file)
+            except json.JSONDecodeError:
+                user_expenses = {}  # Инициализируем пустым словарем, если файл пустой или содержит неверные данные
+    else:
+        user_expenses = {}  # Инициализируем пустым словарем, если файл не существует
 
 # Инициализация JSON файла, если его нет
 def init_json_file():
@@ -101,6 +120,32 @@ async def start(update: Update, context):
             user_histories[user_id] = [{"role": "system", "content": "Ты помощник."}]
     else:
         await update.message.reply_text('Извините, у вас нет доступа к этому боту.')
+
+def calculate_cost(request_tokens, response_tokens):
+    request_price_per_1k_tokens = models[current_model]["request_price"]
+    response_price_per_1k_tokens = models[current_model]["response_price"]
+    cost = (request_tokens / 1000) * request_price_per_1k_tokens + (response_tokens / 1000) * response_price_per_1k_tokens
+    return round(cost, 2)
+
+async def show_user_expenses(update: Update, context):
+    user_id = update.message.from_user.id
+    if not is_admin(user_id):
+        await update.message.reply_text("Эта команда доступна только администратору.")
+        return
+
+    message = "Расходы пользователей:\n"
+    for uid, expense_data in user_expenses.items():
+        # Получаем имя пользователя из JSON-файла
+        user_info = get_user_by_id(uid)
+        username = user_info['username'] if user_info else 'Unknown'
+        
+        # Проверяем, является ли expense_data словарем и извлекаем значение, если так
+        expense = expense_data.get("expense", 0) if isinstance(expense_data, dict) else expense_data
+
+        # Добавляем информацию о расходах в строку сообщения
+        message += f"{username} - {expense:.2f} ₽\n"
+
+    await update.message.reply_text(message)
 
 # Команда /menu для отображения информации о текущей модели и количестве активных пользователей
 async def menu(update: Update, context):
@@ -247,8 +292,25 @@ async def handle_message(update: Update, context):
             )
             bot_reply = response['choices'][0]['message']['content']
             filtered_reply = latex_to_plain_text(bot_reply)
+
+            # Получаем количество использованных токенов для запроса и ответа
+            request_tokens = response["usage"]["prompt_tokens"]
+            response_tokens = response["usage"]["completion_tokens"]
+            total_tokens = response["usage"]["total_tokens"]
+
+            # Рассчитываем стоимость запроса
+            cost = calculate_cost(request_tokens, response_tokens)
+
+            # Обновление истории расходов
+            if user_id not in user_expenses:
+                user_expenses[user_id] = 0.0
+            user_expenses[user_id] += cost
+
+            # Сохранение данных о расходах в JSON-файл
+            save_expenses_to_json()
+
             user_histories[user_id].append({"role": "assistant", "content": filtered_reply})
-            await update.message.reply_text(filtered_reply)
+            await update.message.reply_text(f"{filtered_reply}\n\nСтоимость запроса: {cost} ₽")
         except Exception as e:
             await update.message.reply_text(f"Ошибка: {str(e)}")
     else:
@@ -262,35 +324,34 @@ async def handle_voice_message(update: Update, context):
         voice_file = await file_info.download_as_bytearray()  # Загружаем файл как байтовый массив
 
         try:
-            # Создаем временный файл для передачи в Whisper
-            audio_file = io.BytesIO(voice_file)
-            audio_file.name = "voice.ogg"  # Указываем имя файла с правильным расширением
-
-            # Распознавание речи через Whisper
-            transcription = openai.Audio.transcribe(
-                file=audio_file,  # Передаем временный файл в OpenAI Whisper
-                model="whisper-1"
-            )
-
-            user_message = transcription['text']
-            
-            # Обрабатываем расшифрованное сообщение как текстовое
-            if user_id not in user_histories:
-                user_histories[user_id] = [{"role": "system", "content": "Ты помощник."}]
-
-            user_histories[user_id].append({"role": "user", "content": user_message})
-
-            # Отправляем запрос с выбранной моделью
+            # Получаем ответ от модели
             response = openai.ChatCompletion.create(
                 model=current_model,
-                messages=user_histories[user_id],
+                messages=user_histories[str(user_id)],
                 max_tokens=1024
             )
 
             bot_reply = response['choices'][0]['message']['content']
             filtered_reply = latex_to_plain_text(bot_reply)
-            user_histories[user_id].append({"role": "assistant", "content": filtered_reply})
-            await update.message.reply_text(filtered_reply)
+
+            # Получаем количество использованных токенов
+            usage = response.get("usage", {})
+            prompt_tokens = usage.get("prompt_tokens", 0)
+            completion_tokens = usage.get("completion_tokens", 0)
+            total_tokens = prompt_tokens + completion_tokens
+
+            cost = calculate_cost(total_tokens)
+
+            # Обновление истории расходов
+            if str(user_id) not in user_expenses:
+                user_expenses[str(user_id)] = 0.0
+            user_expenses[str(user_id)] += cost
+
+            # Сохранение данных о расходах в JSON-файл
+            save_expenses_to_json()
+
+            user_histories[str(user_id)].append({"role": "assistant", "content": filtered_reply})
+            await update.message.reply_text(f"{filtered_reply}\n\nСтоимость запроса: {cost:.4f} ₽")
 
         except Exception as e:
             await update.message.reply_text(f"Произошла ошибка: {e}")
@@ -370,10 +431,12 @@ def main():
 
     # Инициализация файла JSON
     init_json_file()
+    load_expenses_from_json()
 
     # Команды
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("menu", menu))
+    application.add_handler(CommandHandler("info", show_user_expenses))
 
     # Обработка кнопок в меню
     application.add_handler(CallbackQueryHandler(menu_button_handler, pattern="^menu:"))
