@@ -128,24 +128,32 @@ def calculate_cost(request_tokens, response_tokens):
     return round(cost, 2)
 
 async def show_user_expenses(update: Update, context):
-    user_id = update.message.from_user.id
+    # Определяем, откуда поступил запрос
+    if update.message:
+        user_id = update.message.from_user.id
+    elif update.callback_query:
+        user_id = update.callback_query.from_user.id
+
+    # Проверяем, что команду выполняет администратор
     if not is_admin(user_id):
-        await update.message.reply_text("Эта команда доступна только администратору.")
+        if update.message:
+            await update.message.reply_text("У вас нет прав для просмотра информации о расходах.")
+        elif update.callback_query:
+            await update.callback_query.answer("У вас нет прав для просмотра информации о расходах.", show_alert=True)
         return
 
+    # Формируем текст с расходами пользователей
     message = "Расходы пользователей:\n"
-    for uid, expense_data in user_expenses.items():
-        # Получаем имя пользователя из JSON-файла
-        user_info = get_user_by_id(uid)
-        username = user_info['username'] if user_info else 'Unknown'
-        
-        # Проверяем, является ли expense_data словарем и извлекаем значение, если так
-        expense = expense_data.get("expense", 0) if isinstance(expense_data, dict) else expense_data
-
-        # Добавляем информацию о расходах в строку сообщения
+    for uid, expense in user_expenses.items():
+        user = get_user_by_id(uid)
+        username = user.get("username", "Неизвестный пользователь")
         message += f"{username} - {expense:.2f} ₽\n"
 
-    await update.message.reply_text(message)
+    # Отправляем сообщение в зависимости от источника запроса
+    if update.message:
+        await update.message.reply_text(message)
+    elif update.callback_query:
+        await update.callback_query.message.edit_text(message)
 
 # Команда /menu для отображения информации о текущей модели и количестве активных пользователей
 async def menu(update: Update, context):
