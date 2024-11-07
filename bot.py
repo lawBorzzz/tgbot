@@ -128,7 +128,7 @@ def calculate_cost(request_tokens, response_tokens):
     return round(cost, 2)
 
 async def show_user_expenses(update: Update, context):
-    # Определяем, откуда поступил запрос
+    # Определяем источник вызова (команда или кнопка)
     if update.message:
         user_id = update.message.from_user.id
     elif update.callback_query:
@@ -149,11 +149,15 @@ async def show_user_expenses(update: Update, context):
         username = user.get("username", "Неизвестный пользователь")
         message += f"{username} - {expense:.2f} ₽\n"
 
-    # Отправляем сообщение в зависимости от источника запроса
+    # Кнопка "Назад"
+    buttons = [[InlineKeyboardButton("Назад", callback_data="menu:back")]]
+    reply_markup = InlineKeyboardMarkup(buttons)
+
+    # Отправка сообщения в зависимости от источника вызова
     if update.message:
-        await update.message.reply_text(message)
+        await update.message.reply_text(message, reply_markup=reply_markup)
     elif update.callback_query:
-        await update.callback_query.message.edit_text(message)
+        await update.callback_query.message.edit_text(message, reply_markup=reply_markup)
 
 # Команда /menu для отображения информации о текущей модели и количестве активных пользователей
 async def menu(update: Update, context):
@@ -205,7 +209,7 @@ async def menu_button_handler(update: Update, context):
     elif data == "menu:models":
         await show_models_menu(query)
     elif data == "menu:expenses":
-        await show_user_expenses(update, context)
+        await show_user_expenses(update, context)  # Вызов функции для показа расходов
     elif data == "menu:back":
         # Возвращаемся в главное меню
         await menu(update, context)
