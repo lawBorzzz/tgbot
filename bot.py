@@ -135,12 +135,17 @@ async def show_user_expenses(update: Update, context):
 
     message = "Расходы пользователей:\n"
     for uid, expense_data in user_expenses.items():
+        # Получаем имя пользователя из JSON-файла
         user_info = get_user_by_id(uid)
         username = user_info['username'] if user_info else 'Unknown'
-        expense = expense_data.get("expense", 0) if isinstance(expense_data, dict) else expense
+        
+        # Инициализируем expense значением по умолчанию, если expense_data не является словарем
+        expense = expense_data.get("expense", 0) if isinstance(expense_data, dict) else expense_data
+
+        # Добавляем информацию о расходах в строку сообщения
         message += f"{username} - {expense:.2f} ₽\n"
 
-    await send_long_message(update.message.chat, message)  # Заменено на send_long_message
+    await update.message.reply_text(message)
 
 # Команда /menu для отображения информации о текущей модели и количестве активных пользователей
 async def menu(update: Update, context):
